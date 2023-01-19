@@ -27,7 +27,7 @@
   "homepage": "https://github.com/Lupennat/tedious-better-data-types",
   "bugs": "https://github.com/Lupennat/tedious-better-data-types/issues",
   "license": "MIT",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "./lib/tedious.js",
   "types": "./index.d.ts",
   "repository": {
