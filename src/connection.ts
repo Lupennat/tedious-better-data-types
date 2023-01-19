@@ -334,6 +334,46 @@ interface InternalConnectionConfig {
   options: InternalConnectionOptions;
 }
 
+type ParserCallback = (value: unknown) => void;
+
+export interface DateTimeObject {
+  startingYear: number;
+  days?: number;
+  minutes? :number;
+  milliseconds? :number;
+  nanoseconds? :number;
+  offset? :number;
+}
+
+export type CustomParserCallback = (parserCallback: ParserCallback, ...value: unknown[]) => void
+export interface CustomParsers {
+  BigInt?: CustomParserCallback;
+  Binary?: CustomParserCallback;
+  Bit?: CustomParserCallback;
+  Char?: CustomParserCallback;
+  Date?: CustomParserCallback;
+  DateTime?: CustomParserCallback;
+  DateTime2?: CustomParserCallback;
+  DateTimeOffset?: CustomParserCallback;
+  Decimal?: CustomParserCallback;
+  Float?: CustomParserCallback;
+  Image?: CustomParserCallback;
+  Int?: CustomParserCallback;
+  Money?: CustomParserCallback;
+  NChar?: CustomParserCallback;
+  NText?: CustomParserCallback;
+  Real?: CustomParserCallback;
+  SmallDateTime?: CustomParserCallback;
+  SmallInt?: CustomParserCallback;
+  SmallMoney?: CustomParserCallback;
+  Text?: CustomParserCallback;
+  Time?: CustomParserCallback;
+  TinyInt?: CustomParserCallback;
+  UDT?: CustomParserCallback;
+  UniqueIdentifier?: CustomParserCallback;
+  Xml?: CustomParserCallback;
+}
+
 export interface InternalConnectionOptions {
   abortTransactionOnError: boolean;
   appName: undefined | string;
@@ -345,6 +385,7 @@ export interface InternalConnectionOptions {
   connectionRetryInterval: number;
   connectTimeout: number;
   connectionIsolationLevel: typeof ISOLATION_LEVEL[keyof typeof ISOLATION_LEVEL];
+  customParsers: undefined | CustomParsers;
   cryptoCredentialsDetails: SecureContextOptions;
   database: undefined | string;
   datefirst: number;
@@ -378,6 +419,9 @@ export interface InternalConnectionOptions {
   port: undefined | number;
   readOnlyIntent: boolean;
   requestTimeout: number;
+  returnDateTimeAsObject: boolean;
+  returnDecimalAndNumericAsString: boolean;
+  returnMoneyAsString: boolean,
   rowCollectionOnDone: boolean;
   rowCollectionOnRequestCompletion: boolean;
   serverName: undefined | string;
@@ -563,6 +607,11 @@ export interface ConnectionOptions {
    * (default: `{}`)
    */
   cryptoCredentialsDetails?: SecureContextOptions;
+
+  /**
+   * Custom Parsers For Values Types. (default: `undefined`)
+   */
+  customParsers?: CustomParsers | undefined;
 
   /**
    * Database to connect to (default: dependent on server configuration).
@@ -762,6 +811,21 @@ export interface ConnectionOptions {
    * (default: `15000`).
    */
   requestTimeout?: number;
+
+  /**
+   * If true, Numeric and Decimal will be serialized as string. (default: false)
+   */
+  returnDecimalAndNumericAsString?: boolean;
+
+  /**
+   * If true, Dates and Times will be serialized as object. (default: false)
+   */
+  returnDateTimeAsObject?: boolean;
+
+  /**
+   * If true, Money and SmallMoney will be serialized as string. (default: false)
+   */
+  returnMoneyAsString?: boolean;
 
   /**
    * A boolean, that when true will expose received rows in Requests done related events:
@@ -1224,6 +1288,7 @@ class Connection extends EventEmitter {
         connectTimeout: DEFAULT_CONNECT_TIMEOUT,
         connectionIsolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
         cryptoCredentialsDetails: {},
+        customParsers: undefined,
         database: undefined,
         datefirst: DEFAULT_DATEFIRST,
         dateFormat: DEFAULT_DATEFORMAT,
@@ -1256,6 +1321,9 @@ class Connection extends EventEmitter {
         port: DEFAULT_PORT,
         readOnlyIntent: false,
         requestTimeout: DEFAULT_CLIENT_REQUEST_TIMEOUT,
+        returnDateTimeAsObject: false,
+        returnDecimalAndNumericAsString: false,
+        returnMoneyAsString: false,
         rowCollectionOnDone: false,
         rowCollectionOnRequestCompletion: false,
         serverName: undefined,
@@ -1672,6 +1740,34 @@ class Connection extends EventEmitter {
         }
 
         this.config.options.lowerCaseGuids = config.options.lowerCaseGuids;
+      }
+
+      if (config.options.returnDecimalAndNumericAsString !== undefined) {
+        if (typeof config.options.returnDecimalAndNumericAsString !== 'boolean') {
+          throw new TypeError('options.returnDecimalAndNumericAsString must be a boolean (true or false).');
+        }
+
+        this.config.options.returnDecimalAndNumericAsString = config.options.returnDecimalAndNumericAsString;
+      }
+
+      if (config.options.returnMoneyAsString !== undefined) {
+        if (typeof config.options.returnMoneyAsString !== 'boolean') {
+          throw new TypeError('options.returnMoneyAsString must be a boolean (true or false).');
+        }
+
+        this.config.options.returnMoneyAsString = config.options.returnMoneyAsString;
+      }
+
+      if (config.options.returnDateTimeAsObject !== undefined) {
+        if (typeof config.options.returnDateTimeAsObject !== 'boolean') {
+          throw new TypeError('options.returnDateTimeAsObject must be a boolean (true or false).');
+        }
+
+        this.config.options.returnDateTimeAsObject = config.options.returnDateTimeAsObject;
+      }
+
+      if (config.options.customParsers !== undefined) {
+        this.config.options.customParsers = config.options.customParsers;
       }
     }
 

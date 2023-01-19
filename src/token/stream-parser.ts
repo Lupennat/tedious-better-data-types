@@ -16,6 +16,7 @@ import returnValueParser from './returnvalue-token-parser';
 import rowParser from './row-token-parser';
 import nbcRowParser from './nbcrow-token-parser';
 import sspiParser from './sspi-token-parser';
+import { convertLEBytesToString } from '../tracking-buffer/buffer-to-string';
 
 const tokenParsers = {
   [TYPE.DONE]: doneParser,
@@ -33,7 +34,7 @@ const tokenParsers = {
   [TYPE.SSPI]: sspiParser
 };
 
-export type ParserOptions = Pick<InternalConnectionOptions, 'useUTC' | 'lowerCaseGuids' | 'tdsVersion' | 'useColumnNames' | 'columnNameReplacer' | 'camelCaseColumns'>;
+export type ParserOptions = Pick<InternalConnectionOptions, 'customParsers' | 'returnDateTimeAsObject' | 'returnMoneyAsString' | 'returnDecimalAndNumericAsString' | 'useUTC' | 'lowerCaseGuids' | 'tdsVersion' | 'useColumnNames' | 'columnNameReplacer' | 'camelCaseColumns'>;
 
 class StreamBuffer {
   iterator: AsyncIterator<Buffer, any, undefined> | Iterator<Buffer, any, undefined>;
@@ -173,6 +174,14 @@ class Parser {
         this.awaitData(length, callback);
       });
     }
+  }
+
+  readLEBytesAsString(length: number) {
+    return (callback: (data: string) => void) => {
+      this.readBuffer(length, (buffer) => {
+        callback(convertLEBytesToString(buffer));
+      });
+    };
   }
 
   readInt8(callback: (data: number) => void) {
@@ -365,6 +374,16 @@ class Parser {
       this.position += 8;
 
       callback((0x100000000 * high) + low);
+    });
+  }
+
+  readUNumeric64LEBI(callback: (data: bigint) => void) {
+    this.awaitData(8, () => {
+      const data = this.buffer.readBigUInt64LE(this.position);
+
+      this.position += 8;
+
+      callback(data);
     });
   }
 

@@ -5,6 +5,10 @@ import { TYPE } from './data-type';
 import iconv from 'iconv-lite';
 import { sprintf } from 'sprintf-js';
 import { bufferToLowerCaseGuid, bufferToUpperCaseGuid } from './guid-parser';
+import { convertLEBytesToString } from './tracking-buffer/buffer-to-string';
+import { CustomParserCallback, CustomParsers, DateTimeObject } from './connection';
+
+convertLEBytesToString
 
 const NULL = (1 << 16) - 1;
 const MAX = (1 << 16) - 1;
@@ -40,16 +44,25 @@ function readFloat(parser: Parser, callback: (value: unknown) => void) {
   parser.readDoubleLE(callback);
 }
 
-function readSmallMoney(parser: Parser, callback: (value: unknown) => void) {
+function readSmallMoney(parser: Parser, asString :boolean, callback: (value: unknown) => void) {
   parser.readInt32LE((value) => {
-    callback(value / MONEY_DIVISOR);
+    value = value / MONEY_DIVISOR;
+    callback(asString ? value.toFixed(4) : value);
   });
 }
 
-function readMoney(parser: Parser, callback: (value: unknown) => void) {
+function readMoney(parser: Parser, asString: boolean, callback: (value: unknown) => void) {
   parser.readInt32LE((high) => {
     parser.readUInt32LE((low) => {
-      callback((low + (0x100000000 * high)) / MONEY_DIVISOR);
+      let value: string |number;
+      if (asString) {
+        const sum = (BigInt(low) + (BigInt(0x100000000) * BigInt(high))).toString();
+        const dotPosition = sum.length - 4;
+        value = sum.slice(0, dotPosition) + "." + sum.slice(dotPosition);
+      } else {
+        value = (low + 0x100000000 * high) / MONEY_DIVISOR
+      }
+      callback(value);
     });
   });
 }
@@ -62,6 +75,8 @@ function readBit(parser: Parser, callback: (value: unknown) => void) {
 
 function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, callback: (value: unknown) => void): void {
   const type = metadata.type;
+
+  callback = getCustomCallback(type.name, options, callback);
 
   switch (type.name) {
     case 'Null':
@@ -86,12 +101,16 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
             return callback(null);
 
           case 1:
+            callback = getCustomCallback('TinyInt', options, callback);
             return readTinyInt(parser, callback);
           case 2:
+            callback = getCustomCallback('SmallInt', options, callback);
             return readSmallInt(parser, callback);
           case 4:
+            callback = getCustomCallback('Int', options, callback);
             return readInt(parser, callback);
           case 8:
+            callback = getCustomCallback('BigInt', options, callback);
             return readBigInt(parser, callback);
 
           default:
@@ -112,8 +131,10 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
             return callback(null);
 
           case 4:
+            callback = getCustomCallback('Real', options, callback);
             return readReal(parser, callback);
           case 8:
+            callback = getCustomCallback('Float', options, callback);
             return readFloat(parser, callback);
 
           default:
@@ -122,10 +143,10 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
       });
 
     case 'SmallMoney':
-      return readSmallMoney(parser, callback);
+      return readSmallMoney(parser, options.returnMoneyAsString, callback);
 
     case 'Money':
-      return readMoney(parser, callback);
+      return readMoney(parser, options.returnMoneyAsString, callback);
 
     case 'MoneyN':
       return parser.readUInt8((dataLength) => {
@@ -134,9 +155,11 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
             return callback(null);
 
           case 4:
-            return readSmallMoney(parser, callback);
+            callback = getCustomCallback('SmallMoney', options, callback);
+            return readSmallMoney(parser, options.returnMoneyAsString, callback);
           case 8:
-            return readMoney(parser, callback);
+            callback = getCustomCallback('Money', options, callback);
+            return readMoney(parser, options.returnMoneyAsString, callback);
 
           default:
             throw new Error('Unsupported dataLength ' + dataLength + ' for MoneyN');
@@ -153,6 +176,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
             return callback(null);
 
           case 1:
+            callback = getCustomCallback('Bit', options, callback);
             return readBit(parser, callback);
 
           default:
@@ -162,6 +186,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
 
     case 'VarChar':
     case 'Char':
+      callback = getCustomCallback('Char', options, callback);
       const codepage = metadata.collation!.codepage!;
       if (metadata.dataLength === MAX) {
         return readMaxChars(parser, codepage, callback);
@@ -177,6 +202,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
 
     case 'NVarChar':
     case 'NChar':
+      callback = getCustomCallback('NChar', options, callback);
       if (metadata.dataLength === MAX) {
         return readMaxNChars(parser, callback);
       } else {
@@ -191,6 +217,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
 
     case 'VarBinary':
     case 'Binary':
+      callback = getCustomCallback('Binary', options, callback);
       if (metadata.dataLength === MAX) {
         return readMaxBinary(parser, callback);
       } else {
@@ -252,10 +279,10 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
       return readMaxNChars(parser, callback);
 
     case 'SmallDateTime':
-      return readSmallDateTime(parser, options.useUTC, callback);
+      return readSmallDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
     case 'DateTime':
-      return readDateTime(parser, options.useUTC, callback);
+      return readDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
     case 'DateTimeN':
       return parser.readUInt8((dataLength) => {
@@ -264,9 +291,11 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
             return callback(null);
 
           case 4:
-            return readSmallDateTime(parser, options.useUTC, callback);
+            callback = getCustomCallback('SmallDateTime', options, callback);
+            return readSmallDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
           case 8:
-            return readDateTime(parser, options.useUTC, callback);
+            callback = getCustomCallback('DateTime', options, callback);
+            return readDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
           default:
             throw new Error('Unsupported dataLength ' + dataLength + ' for DateTimeN');
@@ -278,7 +307,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readTime(parser, dataLength!, metadata.scale!, options.useUTC, callback);
+          return readTime(parser, dataLength, metadata.scale, options.useUTC, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -287,7 +316,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readDate(parser, options.useUTC, callback);
+          return readDate(parser, options.useUTC, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -296,7 +325,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readDateTime2(parser, dataLength!, metadata.scale!, options.useUTC, callback);
+          return readDateTime2(parser, dataLength, metadata.scale, options.useUTC, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -305,17 +334,18 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readDateTimeOffset(parser, dataLength!, metadata.scale!, callback);
+          return readDateTimeOffset(parser, dataLength, metadata.scale, options.returnDateTimeAsObject, callback);
         }
       });
 
     case 'NumericN':
     case 'DecimalN':
+      callback = getCustomCallback('Decimal', options, callback);
       return parser.readUInt8((dataLength) => {
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readNumeric(parser, dataLength!, metadata.precision!, metadata.scale!, callback);
+          return readNumeric(parser, dataLength, metadata.precision, metadata.scale, options.returnDecimalAndNumericAsString, callback);
         }
       });
 
@@ -356,32 +386,57 @@ function readUniqueIdentifier(parser: Parser, options: ParserOptions, callback: 
   });
 }
 
-function readNumeric(parser: Parser, dataLength: number, _precision: number, scale: number, callback: (value: unknown) => void) {
+function readNumeric(parser: Parser, dataLength: number, _precision: number, scale: number, asString: boolean, callback: (value: unknown) => void) {
   parser.readUInt8((sign) => {
-    sign = sign === 1 ? 1 : -1;
+    if (asString) {
+      let readValue;
 
-    let readValue;
-    if (dataLength === 5) {
-      readValue = parser.readUInt32LE;
-    } else if (dataLength === 9) {
-      readValue = parser.readUNumeric64LE;
-    } else if (dataLength === 13) {
-      readValue = parser.readUNumeric96LE;
-    } else if (dataLength === 17) {
-      readValue = parser.readUNumeric128LE;
+      if (dataLength === 5) {
+        readValue = parser.readUInt32LE;
+      } else if (dataLength === 9) {
+        readValue = parser.readUNumeric64LEBI;
+      } else {
+        readValue = parser.readLEBytesAsString(dataLength - 1);
+      }
+
+      readValue.call(parser, (value: number| bigint | string) => {
+        value = value.toString();
+        value = value.padStart(scale + 1, '0');
+        const idx = value.length - scale;
+        const int = value.slice(0, idx);
+        const dec = value.slice(idx)
+        value = int + (dec ? '.' + dec : '');
+        if (sign == -1) value = '-' + value;
+        callback(value);
+      });
     } else {
-      throw new Error(sprintf('Unsupported numeric dataLength %d', dataLength));
-    }
+      sign = sign === 1 ? 1 : -1;
+      let readValue;
 
-    readValue.call(parser, (value) => {
-      callback((value * sign) / Math.pow(10, scale));
-    });
+      if (dataLength === 5) {
+        readValue = parser.readUInt32LE;
+      } else if (dataLength === 9) {
+        readValue = parser.readUNumeric64LE;
+      } else if (dataLength === 13) {
+        readValue = parser.readUNumeric96LE;
+      } else if (dataLength === 17) {
+        readValue = parser.readUNumeric128LE;
+      } else {
+        throw new Error(sprintf('Unsupported numeric dataLength %d', dataLength));
+      }
+
+      readValue.call(parser, value => {
+        callback(value * sign / Math.pow(10, scale));
+      });
+    }
   });
 }
 
 function readVariant(parser: Parser, options: ParserOptions, dataLength: number, callback: (value: unknown) => void) {
   return parser.readUInt8((baseType) => {
     const type = TYPE[baseType];
+
+    callback = getCustomCallback(type.name, options, callback);
 
     return parser.readUInt8((propBytes) => {
       dataLength = dataLength - propBytes - 2;
@@ -406,10 +461,10 @@ function readVariant(parser: Parser, options: ParserOptions, dataLength: number,
           return readBigInt(parser, callback);
 
         case 'SmallDateTime':
-          return readSmallDateTime(parser, options.useUTC, callback);
+          return readSmallDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
         case 'DateTime':
-          return readDateTime(parser, options.useUTC, callback);
+          return readDateTime(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
         case 'Real':
           return readReal(parser, callback);
@@ -418,45 +473,48 @@ function readVariant(parser: Parser, options: ParserOptions, dataLength: number,
           return readFloat(parser, callback);
 
         case 'SmallMoney':
-          return readSmallMoney(parser, callback);
+          return readSmallMoney(parser, options.returnMoneyAsString, callback);
 
         case 'Money':
-          return readMoney(parser, callback);
+          return readMoney(parser, options.returnMoneyAsString, callback);
 
         case 'Date':
-          return readDate(parser, options.useUTC, callback);
+          return readDate(parser, options.useUTC, options.returnDateTimeAsObject, callback);
 
         case 'Time':
           return parser.readUInt8((scale) => {
-            return readTime(parser, dataLength, scale, options.useUTC, callback);
+            return readTime(parser, dataLength, scale, options.useUTC, options.returnDateTimeAsObject, callback);
           });
 
         case 'DateTime2':
           return parser.readUInt8((scale) => {
-            return readDateTime2(parser, dataLength, scale, options.useUTC, callback);
+            return readDateTime2(parser, dataLength, scale, options.useUTC, options.returnDateTimeAsObject, callback);
           });
 
         case 'DateTimeOffset':
           return parser.readUInt8((scale) => {
-            return readDateTimeOffset(parser, dataLength, scale, callback);
+            return readDateTimeOffset(parser, dataLength, scale, options.returnDateTimeAsObject, callback);
           });
 
         case 'VarBinary':
         case 'Binary':
+          callback = getCustomCallback('Binary', options, callback);
           return parser.readUInt16LE((_maxLength) => {
             readBinary(parser, dataLength, callback);
           });
 
         case 'NumericN':
         case 'DecimalN':
+          callback = getCustomCallback('Binary', options, callback);
           return parser.readUInt8((precision) => {
             parser.readUInt8((scale) => {
-              readNumeric(parser, dataLength, precision, scale, callback);
+              readNumeric(parser, dataLength, precision, scale, options.returnDecimalAndNumericAsString, callback);
             });
           });
 
         case 'VarChar':
         case 'Char':
+          callback = getCustomCallback('Char', options, callback);
           return parser.readUInt16LE((_maxLength) => {
             readCollation(parser, (collation) => {
               readChars(parser, dataLength, collation.codepage!, callback);
@@ -465,6 +523,7 @@ function readVariant(parser: Parser, options: ParserOptions, dataLength: number,
 
         case 'NVarChar':
         case 'NChar':
+          callback = getCustomCallback('NChar', options, callback);
           return parser.readUInt16LE((_maxLength) => {
             readCollation(parser, (_collation) => {
               readNChars(parser, dataLength, callback);
@@ -598,30 +657,38 @@ function readMaxUnknownLength(parser: Parser, callback: (value: null | Buffer) =
   });
 }
 
-function readSmallDateTime(parser: Parser, useUTC: boolean, callback: (value: Date) => void) {
+function readSmallDateTime(parser: Parser, useUTC: boolean, asObject: boolean, callback: (value: Date | DateTimeObject) => void) {
   parser.readUInt16LE((days) => {
     parser.readUInt16LE((minutes) => {
       let value;
-      if (useUTC) {
-        value = new Date(Date.UTC(1900, 0, 1 + days, 0, minutes));
+      if (asObject) {
+        value = { startingYear: 1900, days: days, minutes: minutes };
       } else {
-        value = new Date(1900, 0, 1 + days, 0, minutes);
+        if (useUTC) {
+          value = new Date(Date.UTC(1900, 0, 1 + days, 0, minutes));
+        } else {
+          value = new Date(1900, 0, 1 + days, 0, minutes);
+        }
       }
       callback(value);
     });
   });
 }
 
-function readDateTime(parser: Parser, useUTC: boolean, callback: (value: Date) => void) {
+function readDateTime(parser: Parser, useUTC: boolean, asObject: boolean, callback: (value: Date | DateTimeObject) => void) {
   parser.readInt32LE((days) => {
     parser.readUInt32LE((threeHundredthsOfSecond) => {
       const milliseconds = Math.round(threeHundredthsOfSecond * THREE_AND_A_THIRD);
 
       let value;
-      if (useUTC) {
-        value = new Date(Date.UTC(1900, 0, 1 + days, 0, 0, 0, milliseconds));
+      if (asObject) {
+        value = { startingYear: 1900, days: days, milliseconds: milliseconds };
       } else {
-        value = new Date(1900, 0, 1 + days, 0, 0, 0, milliseconds);
+        if (useUTC) {
+          value = new Date(Date.UTC(1900, 0, 1 + days, 0, 0, 0, milliseconds));
+        } else {
+          value = new Date(1900, 0, 1 + days, 0, 0, 0, milliseconds);
+        }
       }
 
       callback(value);
@@ -633,7 +700,7 @@ interface DateWithNanosecondsDelta extends Date {
   nanosecondsDelta: number;
 }
 
-function readTime(parser: Parser, dataLength: number, scale: number, useUTC: boolean, callback: (value: DateWithNanosecondsDelta) => void) {
+function readTime(parser: Parser, dataLength: number, scale: number, useUTC: boolean, asObject: boolean, callback: (value: DateWithNanosecondsDelta | DateTimeObject, scale: number) => void) {
   let readValue: any;
   switch (dataLength) {
     case 3:
@@ -654,61 +721,89 @@ function readTime(parser: Parser, dataLength: number, scale: number, useUTC: boo
     }
 
     let date;
-    if (useUTC) {
-      date = new Date(Date.UTC(1970, 0, 1, 0, 0, 0, value / 10000)) as DateWithNanosecondsDelta;
+    if (asObject) {
+      date = { startingYear: 1970, nanoseconds: value * 100 };
     } else {
-      date = new Date(1970, 0, 1, 0, 0, 0, value / 10000) as DateWithNanosecondsDelta;
-    }
-    Object.defineProperty(date, 'nanosecondsDelta', {
-      enumerable: false,
-      value: (value % 10000) / Math.pow(10, 7)
-    });
-    callback(date);
-  });
-}
-
-function readDate(parser: Parser, useUTC: boolean, callback: (value: Date) => void) {
-  parser.readUInt24LE((days) => {
-    if (useUTC) {
-      callback(new Date(Date.UTC(2000, 0, days - 730118)));
-    } else {
-      callback(new Date(2000, 0, days - 730118));
-    }
-  });
-}
-
-function readDateTime2(parser: Parser, dataLength: number, scale: number, useUTC: boolean, callback: (value: DateWithNanosecondsDelta) => void) {
-  readTime(parser, dataLength - 3, scale, useUTC, (time) => { // TODO: 'input' is 'time', but TypeScript cannot find "time.nanosecondsDelta";
-    parser.readUInt24LE((days) => {
-      let date;
       if (useUTC) {
-        date = new Date(Date.UTC(2000, 0, days - 730118, 0, 0, 0, +time)) as DateWithNanosecondsDelta;
+        date = new Date(Date.UTC(1970, 0, 1, 0, 0, 0, value / 10000)) as DateWithNanosecondsDelta;
       } else {
-        date = new Date(2000, 0, days - 730118, time.getHours(), time.getMinutes(), time.getSeconds(), time.getMilliseconds()) as DateWithNanosecondsDelta;
+        date = new Date(1970, 0, 1, 0, 0, 0, value / 10000) as DateWithNanosecondsDelta;
       }
       Object.defineProperty(date, 'nanosecondsDelta', {
         enumerable: false,
-        value: time.nanosecondsDelta
+        value: (value % 10000) / Math.pow(10, 7)
       });
-      callback(date);
-    });
+    }
+    callback(date, scale);
   });
 }
 
-function readDateTimeOffset(parser: Parser, dataLength: number, scale: number, callback: (value: DateWithNanosecondsDelta) => void) {
-  readTime(parser, dataLength - 5, scale, true, (time) => {
+function readDate(parser: Parser, useUTC: boolean, asObject: boolean, callback: (value: Date | DateTimeObject) => void) {
+  parser.readUInt24LE((days) => {
+    if (asObject) {
+      callback({ startingYear: 1, days: days });
+    } else {
+      if (useUTC) {
+        callback(new Date(Date.UTC(2000, 0, days - 730118)));
+      } else {
+        callback(new Date(2000, 0, days - 730118));
+      }
+    }
+  });
+}
+
+function readDateTime2(parser: Parser, dataLength: number, scale: number, useUTC: boolean, asObject: boolean, callback: (value: DateWithNanosecondsDelta | DateTimeObject, scale: number) => void) {
+  readTime(parser, dataLength - 3, scale, useUTC, asObject, (time) => { // TODO: 'input' is 'time', but TypeScript cannot find "time.nanosecondsDelta";
     parser.readUInt24LE((days) => {
-      // offset
-      parser.readInt16LE(() => {
-        const date = new Date(Date.UTC(2000, 0, days - 730118, 0, 0, 0, +time)) as DateWithNanosecondsDelta;
+      let date;
+      if (time instanceof Date) {
+        if (useUTC) {
+          date = new Date(Date.UTC(2000, 0, days - 730118, 0, 0, 0, +time)) as DateWithNanosecondsDelta;
+        } else {
+          date = new Date(2000, 0, days - 730118, time.getHours(), time.getMinutes(), time.getSeconds(), time.getMilliseconds()) as DateWithNanosecondsDelta;
+        }
         Object.defineProperty(date, 'nanosecondsDelta', {
           enumerable: false,
           value: time.nanosecondsDelta
         });
-        callback(date);
+      } else {
+        date = { ...time, startingYear: 1, days: days };
+      }
+      callback(date, scale);
+    });
+  });
+}
+
+function readDateTimeOffset(parser: Parser, dataLength: number, scale: number, asObject: boolean, callback: (value: DateWithNanosecondsDelta | DateTimeObject, scale: number) => void) {
+  readTime(parser, dataLength - 5, scale, true, asObject, (time) => {
+    parser.readUInt24LE((days) => {
+      // offset
+      parser.readInt16LE((offset) => {
+        let date;
+        if (time instanceof Date) {
+          date = new Date(Date.UTC(2000, 0, days - 730118, 0, 0, 0, +time)) as DateWithNanosecondsDelta;
+          Object.defineProperty(date, 'nanosecondsDelta', {
+            enumerable: false,
+            value: time.nanosecondsDelta
+          });
+        } else {
+          date = { ...time, startingYear: 1, days: days, offset: offset }
+        }
+        callback(date, scale);
       });
     });
   });
+}
+
+function getCustomCallback(name: string, options: ParserOptions, callback: (value: unknown) => void): (value: unknown) => void {
+  if (options.customParsers == null || !(name in options.customParsers) || typeof options.customParsers[name as keyof CustomParsers] !== 'function') {
+    return callback;
+  }
+  const customParserCallback = options.customParsers[name as keyof CustomParsers] as CustomParserCallback;
+  const originalCallback = callback;
+  return (...value) => {
+    return customParserCallback(originalCallback, value);
+  }
 }
 
 export default valueParse;
