@@ -802,7 +802,7 @@ function getCustomCallback(name: string, options: ParserOptions, callback: (valu
   const customParserCallback = options.customParsers[name as keyof CustomParsers] as CustomParserCallback;
   const originalCallback = callback;
   return (...value) => {
-    return customParserCallback(originalCallback, value);
+    return customParserCallback(originalCallback, ...value);
   }
 }
 

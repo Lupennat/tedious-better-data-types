@@ -147,7 +147,7 @@ export interface DateWithNanosecondsDelta extends Date {
     nanosecondsDelta: number;
   }
 
-export type CustomParserCallback = (parserCallback: (value: unknown) => void, ...value: unknown[]) => void
+export type CustomParserCallback = (parserCallback: (value: unknown) => void, ...value: any[]) => void
 export interface CustomParsers {
   BigInt?: CustomParserCallback;
   Binary?: CustomParserCallback;
