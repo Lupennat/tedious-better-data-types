@@ -307,7 +307,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readTime(parser, dataLength, metadata.scale, options.useUTC, options.returnDateTimeAsObject, callback);
+          return readTime(parser, dataLength!, metadata.scale!, options.useUTC, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -325,7 +325,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readDateTime2(parser, dataLength, metadata.scale, options.useUTC, options.returnDateTimeAsObject, callback);
+          return readDateTime2(parser, dataLength!, metadata.scale!, options.useUTC, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -334,7 +334,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readDateTimeOffset(parser, dataLength, metadata.scale, options.returnDateTimeAsObject, callback);
+          return readDateTimeOffset(parser, dataLength!, metadata.scale!, options.returnDateTimeAsObject, callback);
         }
       });
 
@@ -345,7 +345,7 @@ function valueParse(parser: Parser, metadata: Metadata, options: ParserOptions, 
         if (dataLength === 0) {
           return callback(null);
         } else {
-          return readNumeric(parser, dataLength, metadata.precision, metadata.scale, options.returnDecimalAndNumericAsString, callback);
+          return readNumeric(parser, dataLength!, metadata.precision!, metadata.scale!, options.returnDecimalAndNumericAsString, callback);
         }
       });
 
