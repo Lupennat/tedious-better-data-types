@@ -176,8 +176,10 @@ export interface CustomParsers {
   Xml?: CustomParserCallback;
 }
 
+export declare var TYPES: TediousTypes;
 
 export interface ConnectionOptions {
+
 
     /**
      * Custom Parsers For Values Types. (default: `undefined`)
