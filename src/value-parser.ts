@@ -696,7 +696,7 @@ function readDateTime(parser: Parser, useUTC: boolean, asObject: boolean, callba
   });
 }
 
-interface DateWithNanosecondsDelta extends Date {
+export interface DateWithNanosecondsDelta extends Date {
   nanosecondsDelta: number;
 }
 

@@ -4,9 +4,11 @@ import Bit from './data-types/bit';
 import SmallInt from './data-types/smallint';
 import Int from './data-types/int';
 import SmallDateTime from './data-types/smalldatetime';
+import SmallDateTimeTemporal from './data-types/smalldatetime-temporal';
 import Real from './data-types/real';
 import Money from './data-types/money';
 import DateTime from './data-types/datetime';
+import DateTimeTemporal from './data-types/datetime-temporal';
 import Float from './data-types/float';
 import Decimal from './data-types/decimal';
 import Numeric from './data-types/numeric';
@@ -31,9 +33,13 @@ import NVarChar from './data-types/nvarchar';
 import NChar from './data-types/nchar';
 import Xml from './data-types/xml';
 import Time from './data-types/time';
+import TimeTemporal from './data-types/time-temporal';
 import Date from './data-types/date';
+import DateTemporal from './data-types/date-temporal';
 import DateTime2 from './data-types/datetime2';
+import DateTime2Temporal from './data-types/datetime2-temporal';
 import DateTimeOffset from './data-types/datetimeoffset';
+import DateTimeOffsetTemporal from './data-types/datetimeoffset-temporal';
 import UDT from './data-types/udt';
 import TVP from './data-types/tvp';
 import Variant from './data-types/sql-variant';
@@ -442,9 +448,11 @@ export const TYPES = {
   SmallInt,
   Int,
   SmallDateTime,
+  SmallDateTimeTemporal,
   Real,
   Money,
   DateTime,
+  DateTimeTemporal,
   Float,
   Decimal,
   Numeric,
@@ -462,9 +470,13 @@ export const TYPES = {
   NChar,
   Xml,
   Time,
+  TimeTemporal,
   Date,
+  DateTemporal,
   DateTime2,
+  DateTime2Temporal,
   DateTimeOffset,
+  DateTimeOffsetTemporal,
   UDT,
   TVP,
   Variant
