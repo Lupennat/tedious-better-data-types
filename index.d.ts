@@ -281,6 +281,11 @@ export interface ConnectionOptions {
     columnNameReplacer?: ((columnName: string, index: number, columnMetaData: ColumnMetaData) => string) | undefined;
 
     /**
+     *
+     */
+    columnEncryptionSetting?: boolean
+
+    /**
      * Debug options
      */
     debug?: DebugOptions | undefined;
@@ -417,6 +422,22 @@ export interface ConnectionOptions {
      * A boolean, that verifies whether server's identity matches it's certificate's names (default: true)
      */
     trustServerCertificate?: boolean | undefined;
+
+    /**
+     * A boolean determining whether to parse unique identifier type with lowercase case characters (default: `false`).
+     */
+    lowerCaseGuids?: boolean;
+
+    /**
+     * Sets the MultiSubnetFailover = True parameter, which can help minimize the client recovery latency when failovers occur (default: `false`).
+     */
+    multiSubnetFailover?: boolean;
+
+    /**
+     * The workstation ID (WSID) of the client, default os.hostname(). Used for identifying a specific client in profiling, logging or tracing client activity in SQLServer. The value is reported by the TSQL function HOST_NAME().
+     */
+    workstationId?: string | undefined;
+
 }
 
 export interface ConnectionAuthenticationOptions {

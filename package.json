@@ -27,7 +27,7 @@
   "homepage": "https://github.com/Lupennat/tedious-better-data-types",
   "bugs": "https://github.com/Lupennat/tedious-better-data-types/issues",
   "license": "MIT",
-  "version": "16.0.0",
+  "version": "16.1.2",
   "main": "./lib/tedious.js",
   "types": "./index.d.ts",
   "repository": {
@@ -38,7 +38,7 @@
     "node": ">=14"
   },
   "publishConfig": {
-    "tag": "next"
+    "access" : "public"
   },
   "dependencies": {
     "@azure/identity": "^2.0.4",
@@ -97,7 +97,7 @@
     "test": "mocha test/unit test/unit/token test/unit/tracking-buffer",
     "test-integration": "mocha test/integration/",
     "test-all": "mocha test/unit/ test/unit/token/ test/unit/tracking-buffer test/integration/",
-    "build": "rimraf lib && babel src --out-dir lib --extensions .js,.ts && rimraf lib/**/*.map",
+    "build": "rimraf lib && babel src --out-dir lib --extensions .js,.ts --source-maps false",
     "prepublish": "npm run build",
     "semantic-release": "semantic-release"
   },
